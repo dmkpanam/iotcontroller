@@ -1,0 +1,1072 @@
+openapi: 3.1.0
+info:
+  title: Home IoT Controller
+  description: A local-first API for provisioned home IoT devices. Devices are provisioned
+    by an administrator using the CLI; there is no public registration endpoint. Device
+    credentials use HTTP Bearer authentication and should only cross untrusted networks
+    over HTTPS. Telemetry timestamps must include an offset and cannot be over five
+    minutes in the future. Exact retries are idempotent; conflicting message ID reuse
+    returns HTTP 409. SQLite values are normalised as UTC; collection dates are local
+    calendar dates in the configured location timezone.
+  version: 1.0.0
+paths:
+  /health/live:
+    get:
+      tags:
+      - health
+      summary: Live
+      operationId: live_health_live_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                type: object
+                title: Response Live Health Live Get
+  /health/ready:
+    get:
+      tags:
+      - health
+      summary: Ready
+      operationId: ready_health_ready_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                type: object
+                title: Response Ready Health Ready Get
+        '503':
+          description: Database is not ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/devices/me:
+    get:
+      tags:
+      - devices
+      summary: Me
+      description: Returns the authenticated device's own metadata and provisioned
+        capabilities.
+      operationId: me_api_v1_devices_me_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceResponse'
+        '401':
+          description: Missing or invalid device credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Device lacks the required capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Request body exceeds the configured limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Unexpected internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+      - DeviceBearer: []
+  /api/v1/devices/me/telemetry/latest:
+    get:
+      tags:
+      - devices
+      summary: Latest Telemetry
+      description: Requires telemetry.environment.read and returns this device's latest
+        readings.
+      operationId: latest_telemetry_api_v1_devices_me_telemetry_latest_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LatestTelemetryResponse'
+        '401':
+          description: Missing or invalid device credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Device lacks the required capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Request body exceeds the configured limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Unexpected internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+      - DeviceBearer: []
+  /api/v1/telemetry:
+    post:
+      tags:
+      - telemetry
+      summary: Submit Telemetry
+      description: Requires telemetry.temperature.publish and/or telemetry.humidity.publish
+        for each submitted metric. Repeated identical device/message_id submissions
+        are idempotent; reusing an ID with different content returns HTTP 409. Timestamps
+        must include a timezone and be no more than five minutes in the future.
+      operationId: submit_telemetry_api_v1_telemetry_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceMessage'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProtocolResponse'
+        '401':
+          description: Missing or invalid device credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Device lacks the required capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Request body exceeds the configured limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Unexpected internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Conflicting message ID reuse
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+      - DeviceBearer: []
+  /api/v1/environment/current:
+    get:
+      tags:
+      - environment
+      summary: Current Environment
+      description: Requires the telemetry.environment.read capability.
+      operationId: current_environment_api_v1_environment_current_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvironmentCurrent'
+        '401':
+          description: Missing or invalid device credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Device lacks the required capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Request body exceeds the configured limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Unexpected internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+      - DeviceBearer: []
+  /api/v1/weather/current:
+    get:
+      tags:
+      - weather
+      summary: Current Weather
+      description: Requires weather.read. Returns normalized current conditions and
+        cache freshness.
+      operationId: current_weather_api_v1_weather_current_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeatherCurrent'
+        '401':
+          description: Missing or invalid device credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Device lacks the required capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Request body exceeds the configured limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Unexpected internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Weather unavailable and no cache exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+      - DeviceBearer: []
+  /api/v1/weather/forecast:
+    get:
+      tags:
+      - weather
+      summary: Forecast
+      description: Requires weather.read. Returns a normalized forecast with source
+        timestamps.
+      operationId: forecast_api_v1_weather_forecast_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeatherForecast'
+        '401':
+          description: Missing or invalid device credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Device lacks the required capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Request body exceeds the configured limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Unexpected internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Forecast unavailable and no cache exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+      - DeviceBearer: []
+  /api/v1/waste/next:
+    get:
+      tags:
+      - waste
+      summary: Next Collection
+      description: Requires waste_collection.read. Collection dates are local calendar
+        dates and reminder dates are calculated from the actual next collection.
+      operationId: next_collection_api_v1_waste_next_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WasteNext'
+        '401':
+          description: Missing or invalid device credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Device lacks the required capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Request body exceeds the configured limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Unexpected internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Waste schedule is unavailable or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+      - DeviceBearer: []
+  /api/v1/dashboard:
+    get:
+      tags:
+      - dashboard
+      summary: Dashboard
+      description: Requires telemetry.environment.read, weather.read, and waste_collection.read.
+        Sections report unavailable integrations independently.
+      operationId: dashboard_api_v1_dashboard_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardResponse'
+        '401':
+          description: Missing or invalid device credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Device lacks the required capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Request body exceeds the configured limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Unexpected internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+      - DeviceBearer: []
+components:
+  schemas:
+    DashboardResponse:
+      properties:
+        environment:
+          $ref: '#/components/schemas/EnvironmentCurrent'
+        weather:
+          $ref: '#/components/schemas/IntegrationResult_WeatherCurrent_'
+        forecast:
+          $ref: '#/components/schemas/IntegrationResult_WeatherForecast_'
+        waste:
+          $ref: '#/components/schemas/IntegrationResult_WasteNext_'
+      type: object
+      required:
+      - environment
+      - weather
+      - forecast
+      - waste
+      title: DashboardResponse
+    DeviceMessage:
+      properties:
+        protocol_version:
+          type: string
+          const: '1.0'
+          title: Protocol Version
+        message_id:
+          type: string
+          format: uuid
+          title: Message Id
+        device_id:
+          type: string
+          maxLength: 100
+          minLength: 1
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+          title: Device Id
+        message_type:
+          type: string
+          const: telemetry.publish
+          title: Message Type
+        timestamp:
+          type: string
+          format: date-time
+          title: Timestamp
+        payload:
+          $ref: '#/components/schemas/TelemetryPayload'
+      type: object
+      required:
+      - protocol_version
+      - message_id
+      - device_id
+      - message_type
+      - timestamp
+      - payload
+      title: DeviceMessage
+      example:
+        device_id: esp32-kitchen-environment-01
+        message_id: e0a87b47-3f19-4c55-94d8-5f50e1e9c68a
+        message_type: telemetry.publish
+        payload:
+          measurements:
+          - metric: temperature
+            unit: Cel
+            value: 22.4
+          - metric: relative_humidity
+            unit: '%'
+            value: 56.2
+        protocol_version: '1.0'
+        timestamp: '2026-10-12T12:00:00Z'
+    DeviceResponse:
+      properties:
+        device_id:
+          type: string
+          title: Device Id
+        name:
+          type: string
+          title: Name
+        device_type:
+          type: string
+          title: Device Type
+        status:
+          type: string
+          title: Status
+        capabilities:
+          items:
+            type: string
+          type: array
+          title: Capabilities
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        firmware_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Firmware Version
+        hardware_model:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Hardware Model
+        location:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Location
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        last_seen_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Last Seen At
+      type: object
+      required:
+      - device_id
+      - name
+      - device_type
+      - status
+      - capabilities
+      - created_at
+      title: DeviceResponse
+    EnvironmentCurrent:
+      properties:
+        status:
+          type: string
+          enum:
+          - available
+          - stale
+          - unavailable
+          title: Status
+        source_device_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Device Id
+        timestamp:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Timestamp
+        stale:
+          type: boolean
+          title: Stale
+          default: false
+        measurements:
+          additionalProperties:
+            $ref: '#/components/schemas/EnvironmentMeasurement'
+          type: object
+          title: Measurements
+      type: object
+      required:
+      - status
+      - source_device_id
+      - measurements
+      title: EnvironmentCurrent
+      example:
+        measurements:
+          relative_humidity:
+            stale: false
+            timestamp: '2026-10-12T12:00:00Z'
+            unit: '%'
+            value: 56.2
+          temperature:
+            stale: false
+            timestamp: '2026-10-12T12:00:00Z'
+            unit: Cel
+            value: 22.4
+        source_device_id: esp32-kitchen-environment-01
+        stale: false
+        status: available
+        timestamp: '2026-10-12T12:00:00Z'
+    EnvironmentMeasurement:
+      properties:
+        value:
+          type: number
+          title: Value
+        unit:
+          type: string
+          title: Unit
+        timestamp:
+          type: string
+          format: date-time
+          title: Timestamp
+        stale:
+          type: boolean
+          title: Stale
+      type: object
+      required:
+      - value
+      - unit
+      - timestamp
+      - stale
+      title: EnvironmentMeasurement
+    ErrorDetail:
+      properties:
+        code:
+          type: string
+          title: Code
+        message:
+          type: string
+          title: Message
+        details:
+          anyOf:
+          - items:
+              additionalProperties: true
+              type: object
+            type: array
+          - type: 'null'
+          title: Details
+      type: object
+      required:
+      - code
+      - message
+      title: ErrorDetail
+    ErrorResponse:
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorDetail'
+      type: object
+      required:
+      - error
+      title: ErrorResponse
+    ForecastPeriod:
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          title: Timestamp
+        temperature_c:
+          type: number
+          title: Temperature C
+        precipitation_probability_percent:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Precipitation Probability Percent
+        condition:
+          type: string
+          title: Condition
+      type: object
+      required:
+      - timestamp
+      - temperature_c
+      - condition
+      title: ForecastPeriod
+    IntegrationResult_WasteNext_:
+      properties:
+        status:
+          type: string
+          enum:
+          - available
+          - unavailable
+          title: Status
+        data:
+          anyOf:
+          - $ref: '#/components/schemas/WasteNext'
+          - type: 'null'
+        error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
+      type: object
+      required:
+      - status
+      - data
+      - error
+      title: IntegrationResult[WasteNext]
+    IntegrationResult_WeatherCurrent_:
+      properties:
+        status:
+          type: string
+          enum:
+          - available
+          - unavailable
+          title: Status
+        data:
+          anyOf:
+          - $ref: '#/components/schemas/WeatherCurrent'
+          - type: 'null'
+        error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
+      type: object
+      required:
+      - status
+      - data
+      - error
+      title: IntegrationResult[WeatherCurrent]
+    IntegrationResult_WeatherForecast_:
+      properties:
+        status:
+          type: string
+          enum:
+          - available
+          - unavailable
+          title: Status
+        data:
+          anyOf:
+          - $ref: '#/components/schemas/WeatherForecast'
+          - type: 'null'
+        error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
+      type: object
+      required:
+      - status
+      - data
+      - error
+      title: IntegrationResult[WeatherForecast]
+    LatestMeasurement:
+      properties:
+        metric:
+          type: string
+          title: Metric
+        value:
+          type: number
+          title: Value
+        unit:
+          type: string
+          title: Unit
+        timestamp:
+          type: string
+          format: date-time
+          title: Timestamp
+        received_at:
+          type: string
+          format: date-time
+          title: Received At
+        stale:
+          type: boolean
+          title: Stale
+      type: object
+      required:
+      - metric
+      - value
+      - unit
+      - timestamp
+      - received_at
+      - stale
+      title: LatestMeasurement
+    LatestTelemetryResponse:
+      properties:
+        device_id:
+          type: string
+          title: Device Id
+        measurements:
+          items:
+            $ref: '#/components/schemas/LatestMeasurement'
+          type: array
+          title: Measurements
+      type: object
+      required:
+      - device_id
+      - measurements
+      title: LatestTelemetryResponse
+    Measurement:
+      properties:
+        metric:
+          type: string
+          enum:
+          - temperature
+          - relative_humidity
+          title: Metric
+        value:
+          type: number
+          title: Value
+        unit:
+          type: string
+          enum:
+          - Cel
+          - '%'
+          title: Unit
+      type: object
+      required:
+      - metric
+      - value
+      - unit
+      title: Measurement
+    ProtocolData:
+      properties:
+        accepted:
+          type: boolean
+          title: Accepted
+        duplicate:
+          type: boolean
+          title: Duplicate
+          default: false
+      type: object
+      required:
+      - accepted
+      title: ProtocolData
+    ProtocolResponse:
+      properties:
+        protocol_version:
+          type: string
+          const: '1.0'
+          title: Protocol Version
+          default: '1.0'
+        request_id:
+          type: string
+          format: uuid
+          title: Request Id
+        status:
+          type: string
+          const: success
+          title: Status
+          default: success
+        data:
+          $ref: '#/components/schemas/ProtocolData'
+        error:
+          type: 'null'
+          title: Error
+      type: object
+      required:
+      - request_id
+      - data
+      title: ProtocolResponse
+      example:
+        data:
+          accepted: true
+          duplicate: false
+        protocol_version: '1.0'
+        request_id: e0a87b47-3f19-4c55-94d8-5f50e1e9c68a
+        status: success
+    TelemetryPayload:
+      properties:
+        measurements:
+          items:
+            $ref: '#/components/schemas/Measurement'
+          type: array
+          maxItems: 10
+          minItems: 1
+          title: Measurements
+      type: object
+      required:
+      - measurements
+      title: TelemetryPayload
+    WasteNext:
+      properties:
+        available:
+          type: boolean
+          title: Available
+        address:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Address
+        collection_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Collection Date
+        bins:
+          items:
+            type: string
+          type: array
+          title: Bins
+        days_remaining:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Days Remaining
+        reminder_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Reminder Date
+        reminder_due:
+          type: boolean
+          title: Reminder Due
+          default: false
+        source_timestamp:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Source Timestamp
+        stale:
+          type: boolean
+          title: Stale
+          default: false
+      type: object
+      required:
+      - available
+      title: WasteNext
+      example:
+        address: Configured Bury address
+        available: true
+        bins:
+        - General waste
+        - Recycling
+        collection_date: '2026-10-16'
+        days_remaining: 1
+        reminder_date: '2026-10-15'
+        reminder_due: true
+        source_timestamp: '2026-10-12T12:00:00Z'
+        stale: false
+    WeatherCurrent:
+      properties:
+        location:
+          type: string
+          title: Location
+        temperature_c:
+          type: number
+          title: Temperature C
+        relative_humidity_percent:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Relative Humidity Percent
+        apparent_temperature_c:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Apparent Temperature C
+        condition:
+          type: string
+          title: Condition
+        precipitation_mm:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Precipitation Mm
+        wind_speed_kmh:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Wind Speed Kmh
+        source_timestamp:
+          type: string
+          format: date-time
+          title: Source Timestamp
+        fetched_at:
+          type: string
+          format: date-time
+          title: Fetched At
+        stale:
+          type: boolean
+          title: Stale
+          default: false
+      type: object
+      required:
+      - location
+      - temperature_c
+      - condition
+      - source_timestamp
+      - fetched_at
+      title: WeatherCurrent
+      example:
+        apparent_temperature_c: 12.7
+        condition: Partly cloudy
+        fetched_at: '2026-10-12T12:00:03Z'
+        location: Bury, Greater Manchester, UK
+        precipitation_mm: 0
+        relative_humidity_percent: 78
+        source_timestamp: '2026-10-12T12:00:00Z'
+        stale: false
+        temperature_c: 14.2
+        wind_speed_kmh: 12.4
+    WeatherForecast:
+      properties:
+        location:
+          type: string
+          title: Location
+        periods:
+          items:
+            $ref: '#/components/schemas/ForecastPeriod'
+          type: array
+          title: Periods
+        source_timestamp:
+          type: string
+          format: date-time
+          title: Source Timestamp
+        fetched_at:
+          type: string
+          format: date-time
+          title: Fetched At
+        stale:
+          type: boolean
+          title: Stale
+          default: false
+      type: object
+      required:
+      - location
+      - periods
+      - source_timestamp
+      - fetched_at
+      title: WeatherForecast
+      example:
+        fetched_at: '2026-10-12T12:00:03Z'
+        location: Bury, Greater Manchester, UK
+        periods:
+        - condition: Partly cloudy
+          precipitation_probability_percent: 20
+          temperature_c: 14.0
+          timestamp: '2026-10-12T13:00:00Z'
+        source_timestamp: '2026-10-12T12:00:03Z'
+        stale: false
+  securitySchemes:
+    DeviceBearer:
+      type: http
+      scheme: bearer
