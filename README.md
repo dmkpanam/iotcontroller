@@ -4,12 +4,12 @@ A local-first FastAPI service for provisioned home IoT devices. It provides devi
 
 ## Requirements and setup
 
-Python 3.12 or newer is required.
+Python 3.11 or newer is required (fully compatible with Raspberry Pi OS Bookworm's default Python 3.11).
 
 ```sh
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -e '.[dev]'
+pip install -e .
 cp .env.example .env
 ```
 
@@ -26,7 +26,7 @@ The SQLite file defaults to `./home_controller.db`. Back it up while the service
 
 ### Raspberry Pi OS deployment
 
-Install Python 3.12 or newer if the installed Raspberry Pi OS image provides an older interpreter. Run the service from a dedicated, non-login OS account with read access to `.env` and write access only to the application/database directory. Set `API_HOST` to the Pi's LAN address (or `0.0.0.0` behind a firewall), keep `API_PORT` on the trusted LAN, and do not forward it from the internet.
+The service runs directly on Raspberry Pi OS Bookworm (which includes Python 3.11 by default). Run the service from a dedicated, non-login OS account with read access to `.env` and write access only to the application/database directory. Set `API_HOST` to the Pi's LAN address (or `0.0.0.0` behind a firewall), keep `API_PORT` on the trusted LAN, and do not forward it from the internet.
 
 A minimal systemd unit for an installation under `/opt/home-controller` can use:
 

@@ -1,4 +1,4 @@
-from typing import Literal, TypeVar
+from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel
 
@@ -9,7 +9,7 @@ from home_controller.schemas.weather import WeatherCurrent, WeatherForecast
 T = TypeVar("T")
 
 
-class IntegrationResult[T](BaseModel):
+class IntegrationResult(BaseModel, Generic[T]):
     status: Literal["available", "unavailable"]
     data: T | None
     error: str | None
