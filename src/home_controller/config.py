@@ -2,7 +2,7 @@ from functools import lru_cache
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -25,12 +25,23 @@ class Settings(BaseSettings):
     location_timezone: str = "Europe/London"
     environment_source_device_id: str | None = None
     telemetry_freshness_seconds: int = Field(default=1800, gt=0)
-    waste_provider: Literal["manual"] = "manual"
+    waste_provider: Literal["manual", "bury"] = "manual"
+    waste_postcode: str = ""
     waste_address: str = ""
     waste_manual_schedule: str = "[]"
     waste_cache_ttl_seconds: int = Field(default=3600, ge=0)
-    waste_reminder_days_before: int = Field(default=1, ge=0, le=30)
+    waste_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
     request_body_limit_bytes: int = Field(default=16384, ge=1024, le=1048576)
+
+    @model_validator(mode="after")
+    def require_bury_address(self) -> "Settings":
+        if self.waste_provider == "bury" and (
+            not self.waste_postcode.strip() or not self.waste_address.strip()
+        ):
+            raise ValueError(
+                "WASTE_POSTCODE and WASTE_ADDRESS are required for WASTE_PROVIDER=bury"
+            )
+        return self
 
     @field_validator("database_url")
     @classmethod

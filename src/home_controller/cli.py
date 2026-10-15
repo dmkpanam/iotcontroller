@@ -20,12 +20,37 @@ from home_controller.security.provisioning import (
 )
 
 
+def _device_details(device: Device) -> dict[str, object]:
+    return {
+        "device_id": device.device_id,
+        "name": device.name,
+        "device_type": device.device_type,
+        "status": device.status,
+        "capabilities": sorted(item.capability for item in device.capabilities),
+        "location": device.location,
+        "created_at": as_utc(device.created_at).isoformat(),
+        "last_seen_at": (
+            as_utc(device.last_seen_at).isoformat() if device.last_seen_at else None
+        ),
+    }
+
+
 async def _run(args: argparse.Namespace) -> None:
     settings = get_settings()
     engine = create_async_engine(settings.database_url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
         async with factory() as session:
+            if args.command == "list-devices":
+                devices = (
+                    await session.scalars(
+                        select(Device)
+                        .options(selectinload(Device.capabilities))
+                        .order_by(Device.device_id)
+                    )
+                ).all()
+                print(json.dumps([_device_details(device) for device in devices], indent=2))
+                return
             if args.command == "device-types":
                 device_types = (
                     await session.scalars(select(DeviceType).order_by(DeviceType.name))
@@ -88,20 +113,7 @@ async def _run(args: argparse.Namespace) -> None:
             if args.command == "show":
                 print(
                     json.dumps(
-                        {
-                            "device_id": device.device_id,
-                            "name": device.name,
-                            "device_type": device.device_type,
-                            "status": device.status,
-                            "capabilities": [item.capability for item in device.capabilities],
-                            "location": device.location,
-                            "created_at": as_utc(device.created_at).isoformat(),
-                            "last_seen_at": (
-                                as_utc(device.last_seen_at).isoformat()
-                                if device.last_seen_at
-                                else None
-                            ),
-                        },
+                        _device_details(device),
                         indent=2,
                     )
                 )
@@ -176,6 +188,7 @@ async def _run(args: argparse.Namespace) -> None:
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(prog="home-controller")
     commands = root.add_subparsers(dest="command", required=True)
+    commands.add_parser("list-devices", help="List all devices without credentials as JSON")
     create = commands.add_parser("create", help="Provision a device and issue its first credential")
     create.add_argument("--device-id", required=True)
     create.add_argument("--name", required=True)

@@ -73,6 +73,7 @@ home-controller create \
 The generated credential is printed once. Store it securely and send it as `Authorization: Bearer <credential>`. Credentials are stored as salted scrypt hashes; neither the plaintext token nor authorization headers are logged.
 
 ```sh
+home-controller list-devices
 home-controller disable --device-id esp32-kitchen-environment-01
 home-controller enable --device-id esp32-kitchen-environment-01
 home-controller revoke --device-id esp32-kitchen-environment-01
@@ -84,6 +85,11 @@ home-controller remove-capability --device-id esp32-kitchen-environment-01 --cap
 ```
 
 Rotation revokes the prior credentials and prints the new credential once. A disabled or revoked device cannot authenticate. Assign touchscreen read capabilities only to touchscreen devices; the sensor publishing capabilities do not grant unrelated access.
+
+`home-controller list-devices` lists all provisioned devices, including disabled and
+revoked devices, as a JSON array ordered by device ID. Each entry includes the same
+details as `show`: ID, name, type, status, capabilities, location, creation time, and
+last-seen time. Credentials are never included. An empty database returns `[]`.
 
 ### Managing device capabilities
 
@@ -104,7 +110,7 @@ Use the CLI to inspect and adjust the capabilities granted to an existing device
   home-controller add-capability \
     --device-id esp32-kitchen-environment-01 \
     --capability weather.read \
-    --capability waste_collection.read
+    --capability calendar.read
   ```
 - **Remove a capability**:
   ```sh
@@ -123,9 +129,9 @@ Capabilities are explicitly granted when a device is provisioned. The API curren
 | `telemetry.humidity.publish` | Submit relative humidity measurements (`%`) to `POST /api/v1/telemetry`. |
 | `telemetry.environment.read` | Read configured indoor conditions from `GET /api/v1/environment/current` and the authenticated device's latest measurements from `GET /api/v1/devices/me/telemetry/latest`. |
 | `weather.read` | Read current conditions and forecasts from `GET /api/v1/weather/current` and `GET /api/v1/weather/forecast`. |
-| `waste_collection.read` | Read the next configured bin collection from `GET /api/v1/waste/next`. |
+| `calendar.read` | Read today's and tomorrow's unified calendar from `GET /api/v1/calendar`. |
 
-`GET /api/v1/dashboard` requires all three read capabilities: `telemetry.environment.read`, `weather.read`, and `waste_collection.read`. The dashboard reports integration failures independently, but a device missing any required capability is denied access. Capabilities are checked by the server; listing one in a request does not grant it.
+`GET /api/v1/dashboard` requires all three read capabilities: `telemetry.environment.read`, `weather.read`, and `calendar.read`. The dashboard reports integration failures independently, but a device missing any required capability is denied access. Capabilities are checked by the server; listing one in a request does not grant it.
 
 For example, provision a touchscreen with its required read permissions:
 
@@ -136,7 +142,7 @@ home-controller create \
   --device-type touchscreen \
   --capability telemetry.environment.read \
   --capability weather.read \
-  --capability waste_collection.read
+  --capability calendar.read
 ```
 
 ### Supported device types
@@ -171,7 +177,7 @@ curl -X POST http://127.0.0.1:8000/api/v1/telemetry \
 curl -H "Authorization: Bearer $TOUCHSCREEN_TOKEN" http://127.0.0.1:8000/api/v1/environment/current
 curl -H "Authorization: Bearer $TOUCHSCREEN_TOKEN" http://127.0.0.1:8000/api/v1/weather/current
 curl -H "Authorization: Bearer $TOUCHSCREEN_TOKEN" http://127.0.0.1:8000/api/v1/weather/forecast
-curl -H "Authorization: Bearer $TOUCHSCREEN_TOKEN" http://127.0.0.1:8000/api/v1/waste/next
+curl -H "Authorization: Bearer $TOUCHSCREEN_TOKEN" http://127.0.0.1:8000/api/v1/calendar
 curl -H "Authorization: Bearer $TOUCHSCREEN_TOKEN" http://127.0.0.1:8000/api/v1/dashboard
 ```
 
@@ -187,13 +193,110 @@ Weather supports both **OpenWeatherMap** and **Open-Meteo**:
 
 Configure location and tuning via `WEATHER_LATITUDE`, `WEATHER_LONGITUDE`, `WEATHER_CACHE_TTL_SECONDS`, and `WEATHER_TIMEOUT_SECONDS`. Timestamps are handled in UTC; all response temperatures and wind speeds are normalized to Celsius and km/h. Results are cached; when an upstream request fails, a cached result may be returned with `stale: true`. Without cache, weather endpoints return HTTP 503.
 
-No supported public Bury Council API is configured in this project. Waste collection uses an explicit manual-schedule adapter, not a fabricated council endpoint. After confirming dates for the configured address, set `WASTE_ADDRESS` and, for example:
+Waste collection supports automatic Bury Council lookup and a manual schedule. To enable
+automatic lookup, configure:
+
+```dotenv
+WASTE_PROVIDER=bury
+WASTE_POSTCODE=BL8 1EG
+WASTE_ADDRESS=Willow Brae 46 Hunstanton Drive
+WASTE_CACHE_TTL_SECONDS=3600
+WASTE_TIMEOUT_SECONDS=10
+```
+
+`WASTE_ADDRESS` must match the address line shown by the council's postcode search
+(without the city or postcode). Matching ignores case and repeated whitespace, but
+does not use fuzzy matching. Both postcode and address are required for this provider.
+The service resolves the property identifier once per process and fetches the full
+calendar using the same JSON endpoints as
+[the council's website](https://www.bury.gov.uk/waste-and-recycling/bin-collection-days-and-alerts).
+These are website endpoints, not a guaranteed public API; council changes may require
+an adapter update. No browser installation or additional dependencies are needed.
+
+Collections are grouped by date with bin colours such as `["blue", "brown"]`.
+Requests to `/api/v1/calendar` or the dashboard refresh the in-memory waste cache when
+its TTL expires; no background scheduler runs. Concurrent requests share a refresh.
+Failed refreshes are logged and cached results are marked `stale: true`; without
+a cached schedule, the calendar reports the waste source as unavailable. The cache does not survive
+service restarts.
+
+Alternatively, keep `WASTE_PROVIDER=manual`. After confirming dates for the configured
+address, set `WASTE_ADDRESS` and, for example:
 
 ```sh
 WASTE_MANUAL_SCHEDULE='[{"collection_date":"2026-10-16","bins":["General waste","Recycling"]}]'
 ```
 
-Dates remain local calendar dates in `LOCATION_TIMEZONE` (default `Europe/London`); the default reminder date is one day before the actual next collection. It therefore flags Thursday for a Friday collection without assuming all collections are on Friday. Use an adapter implementing `WasteProvider` when a supported source is selected.
+Dates remain local calendar dates in `LOCATION_TIMEZONE` (default `Europe/London`).
+
+### Unified calendar
+
+`GET /api/v1/calendar` returns exactly two `days`: today and tomorrow in
+`LOCATION_TIMEZONE`, including empty days. Each day contains unified entries with
+a stable `id`, `source`, `kind`, `date`, `title`, and `all_day`. Waste entries also
+contain `collection_date`, `bins`, and `address`.
+
+Waste is the initial source; other sources can implement `CalendarSource` and be
+registered with `CalendarService` without adding source-specific endpoints.
+Weather remains separate and is not included in the calendar.
+
+Each collection appears once, on its collection date. All collections in today's
+and tomorrow's window are included, not just the next one. There are no reminder
+entries or reminder settings; clients decide how to display the events.
+Caller-specified periods are not supported yet.
+
+For a Friday 16 October collection, Thursday's response includes:
+
+```json
+{
+  "timezone": "Europe/London",
+  "days": [
+    {
+      "date": "2026-10-15",
+      "entries": []
+    },
+    {
+      "date": "2026-10-16",
+      "entries": [{
+        "id": "waste:2026-10-16:collection",
+        "source": "waste",
+        "kind": "collection",
+        "date": "2026-10-16",
+        "title": "Bin collection",
+        "all_day": true,
+        "collection_date": "2026-10-16",
+        "bins": ["blue", "brown"],
+        "address": "Willow Brae 46 Hunstanton Drive"
+      }]
+    }
+  ],
+  "sources": {
+    "waste": {
+      "status": "available",
+      "stale": false,
+      "source_timestamp": "2026-10-15T12:00:00Z",
+      "error": null
+    }
+  }
+}
+```
+
+Source failures return HTTP 200 with `sources.<name>.status: "unavailable"` and
+an explicit `error`, keeping healthy sources usable. An available source with
+empty day entries means no scheduled events; an unavailable source means the
+schedule is unknown. Cached events returned after a refresh failure have
+`sources.<name>.stale: true`.
+
+**Breaking change:** `/api/v1/waste/next` has been removed, and the dashboard's
+`waste` section is replaced by `calendar` with the same shape as this endpoint.
+Update clients and grant existing display devices `calendar.read`:
+
+```sh
+home-controller add-capability --device-id kitchen-touchscreen-01 --capability calendar.read
+home-controller remove-capability --device-id kitchen-touchscreen-01 --capability waste_collection.read
+```
+
+The old `waste_collection.read` capability no longer grants access to any endpoint.
 
 ## Development, tests and OpenAPI
 
@@ -214,4 +317,4 @@ python scripts/export_openapi.py
 
 ## Scope and security notes
 
-This is a foundation, not a complete home automation platform. There is no browser CORS policy, self-registration route, built-in administrator web UI, automatic Bury collection lookup, or ESP32 retry implementation. Devices should retry transient telemetry failures using bounded exponential backoff with jitter. Protect the CLI host and database file as administrator resources. The local-development default is plaintext HTTP on loopback; use TLS for any bearer credential crossing an untrusted network.
+This is a foundation, not a complete home automation platform. There is no browser CORS policy, self-registration route, built-in administrator web UI, or ESP32 retry implementation. Devices should retry transient telemetry failures using bounded exponential backoff with jitter. Protect the CLI host and database file as administrator resources. The local-development default is plaintext HTTP on loopback; use TLS for any bearer credential crossing an untrusted network.

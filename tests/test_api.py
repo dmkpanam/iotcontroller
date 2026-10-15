@@ -119,7 +119,7 @@ def test_cli_capabilities_management(test_app, monkeypatch, capsys):
     add_args = Namespace(
         command="add-capability",
         device_id="viewer-01",
-        capability=["waste_collection.read", "telemetry.environment.read"],
+        capability=["calendar.read", "telemetry.environment.read"],
     )
     asyncio.run(cli._run(add_args))
     out = capsys.readouterr().out
@@ -129,8 +129,8 @@ def test_cli_capabilities_management(test_app, monkeypatch, capsys):
     asyncio.run(cli._run(caps_args))
     out = capsys.readouterr().out
     assert json.loads(out) == [
+        "calendar.read",
         "telemetry.environment.read",
-        "waste_collection.read",
         "weather.read",
     ]
 
@@ -148,11 +148,11 @@ def test_cli_capabilities_management(test_app, monkeypatch, capsys):
     remove_args = Namespace(
         command="remove-capability",
         device_id="viewer-01",
-        capability="waste_collection.read",
+        capability="calendar.read",
     )
     asyncio.run(cli._run(remove_args))
     out = capsys.readouterr().out
-    assert "Removed capability 'waste_collection.read'" in out
+    assert "Removed capability 'calendar.read'" in out
 
     # Verify remaining capabilities
     asyncio.run(cli._run(caps_args))
@@ -163,7 +163,7 @@ def test_cli_capabilities_management(test_app, monkeypatch, capsys):
     ]
 
     # Removing a capability that is not present raises SystemExit
-    with pytest.raises(SystemExit, match="Capability 'waste_collection.read' not found"):
+    with pytest.raises(SystemExit, match="Capability 'calendar.read' not found"):
         asyncio.run(cli._run(remove_args))
 
 
@@ -232,6 +232,7 @@ def test_environment_is_unavailable_without_readings(test_app):
 
 
 def test_stale_environment_and_partial_dashboard_failures(test_app, message):
+    from home_controller.services.calendar_service import CalendarService, WasteCalendarSource
     from home_controller.services.waste_service import WasteUnavailable
     from home_controller.services.weather_service import WeatherUnavailable
 
@@ -248,17 +249,20 @@ def test_stale_environment_and_partial_dashboard_failures(test_app, message):
             raise WeatherUnavailable("weather is temporarily unavailable")
 
     class FailingWaste:
-        async def next(self):
+        async def schedule(self):
             raise WasteUnavailable("waste schedule unavailable")
 
     client.app.state.weather_service = FailingWeather()
-    client.app.state.waste_service = FailingWaste()
+    client.app.state.calendar_service = CalendarService(
+        [WasteCalendarSource(FailingWaste(), client.app.state.settings)], "Europe/London"
+    )
     response = client.get("/api/v1/dashboard", headers=headers)
     assert response.status_code == 200
     data = response.json()
     assert data["weather"]["status"] == "unavailable"
     assert data["forecast"]["status"] == "unavailable"
-    assert data["waste"]["status"] == "unavailable"
+    assert data["calendar"]["sources"]["waste"]["status"] == "unavailable"
+    assert "waste" not in data
     assert data["environment"]["status"] == "stale"
 
 
@@ -280,34 +284,6 @@ def test_credential_hashing_and_verification():
     assert not verify_credential(credential, "hci_wrong.invalid")
 
 
-def test_waste_reminders_use_actual_collection_date():
-    class Provider:
-        async def upcoming(self):
-            return [CollectionEntry(collection_date=date(2026, 10, 16), bins=["General waste"])]
-
-    import asyncio
-
-    service = CachedWasteService(Provider(), Settings(location_timezone="Europe/London"))
-    thursday_reminder = asyncio.run(service.next(today=date(2026, 10, 15)))
-    wednesday_no_reminder = asyncio.run(service.next(today=date(2026, 10, 14)))
-    assert thursday_reminder.reminder_due is True
-    assert thursday_reminder.collection_date == date(2026, 10, 16)
-    assert wednesday_no_reminder.reminder_due is False
-
-
-def test_non_friday_collection_reminder():
-    class Provider:
-        async def upcoming(self):
-            return [CollectionEntry(collection_date=date(2026, 10, 17), bins=["Food waste"])]
-
-    import asyncio
-
-    service = CachedWasteService(Provider(), Settings(location_timezone="Europe/London"))
-    result = asyncio.run(service.next(today=date(2026, 10, 16)))
-    assert result.collection_date == date(2026, 10, 17)
-    assert result.reminder_due is True
-
-
 def test_waste_cache_falls_back_to_stale_schedule():
     class Provider:
         fail = False
@@ -324,12 +300,14 @@ def test_waste_cache_falls_back_to_stale_schedule():
         provider,
         Settings(location_timezone="Europe/London", waste_cache_ttl_seconds=0),
     )
-    first = asyncio.run(service.next(today=date(2026, 10, 15)))
+    first = asyncio.run(service.schedule())
     provider.fail = True
-    stale = asyncio.run(service.next(today=date(2026, 10, 15)))
+    stale = asyncio.run(service.schedule())
     assert first.stale is False
     assert stale.stale is True
-    assert stale.collection_date == date(2026, 10, 16)
+    assert stale.entries == [
+        CollectionEntry(collection_date=date(2026, 10, 16), bins=["Recycling"])
+    ]
 
 
 def test_manual_waste_provider_normalizes_configured_schedule():

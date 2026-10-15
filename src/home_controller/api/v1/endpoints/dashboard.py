@@ -13,7 +13,6 @@ from home_controller.models.telemetry import Telemetry
 from home_controller.schemas.dashboard import DashboardResponse
 from home_controller.schemas.envelope import ERROR_RESPONSES
 from home_controller.security.authentication import get_current_device
-from home_controller.services.waste_service import WasteUnavailable
 from home_controller.services.weather_service import WeatherUnavailable
 
 router = APIRouter(prefix="/api/v1", tags=["dashboard"])
@@ -24,7 +23,7 @@ router = APIRouter(prefix="/api/v1", tags=["dashboard"])
     response_model=DashboardResponse,
     responses=ERROR_RESPONSES,
     description=(
-        "Requires telemetry.environment.read, weather.read, and waste_collection.read. "
+        "Requires telemetry.environment.read, weather.read, and calendar.read. "
         "Sections report unavailable integrations independently."
     ),
 )
@@ -37,7 +36,7 @@ async def dashboard(
     required = {
         "telemetry.environment.read",
         "weather.read",
-        "waste_collection.read",
+        "calendar.read",
     }
     missing = required - capabilities
     if missing:
@@ -85,21 +84,21 @@ async def dashboard(
                 for metric, row in latest.items()
             },
         }
-    weather_current, weather_forecast, waste = await asyncio.gather(
+    weather_current, weather_forecast, calendar = await asyncio.gather(
         _integration(lambda: request.app.state.weather_service.get("current")),
         _integration(lambda: request.app.state.weather_service.get("forecast")),
-        _integration(lambda: request.app.state.waste_service.next()),
+        request.app.state.calendar_service.outlook(),
     )
     return DashboardResponse(
         environment=indoor,
         weather=weather_current,
         forecast=weather_forecast,
-        waste=waste,
+        calendar=calendar,
     )
 
 
 async def _integration(call: Callable[[], Awaitable[Any]]) -> dict[str, Any]:
     try:
         return {"status": "available", "data": await call(), "error": None}
-    except (WeatherUnavailable, WasteUnavailable, ValueError) as exc:
+    except (WeatherUnavailable, ValueError) as exc:
         return {"status": "unavailable", "data": None, "error": str(exc)}

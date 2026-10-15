@@ -2,8 +2,8 @@ from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel
 
+from home_controller.schemas.calendar import CalendarOutlook
 from home_controller.schemas.environment import EnvironmentCurrent
-from home_controller.schemas.waste import WasteNext
 from home_controller.schemas.weather import WeatherCurrent, WeatherForecast
 
 T = TypeVar("T")
@@ -19,4 +19,4 @@ class DashboardResponse(BaseModel):
     environment: EnvironmentCurrent
     weather: IntegrationResult[WeatherCurrent]
     forecast: IntegrationResult[WeatherForecast]
-    waste: IntegrationResult[WasteNext]
+    calendar: CalendarOutlook

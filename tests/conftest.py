@@ -21,6 +21,7 @@ def test_app(tmp_path: Path):
     settings = Settings(
         database_url=f"sqlite+aiosqlite:///{tmp_path / 'test.db'}",
         environment_source_device_id="sensor-1",
+        waste_provider="manual",
     )
     app = create_app(settings)
     app.state.engine = engine
@@ -56,7 +57,7 @@ def test_app(tmp_path: Path):
                         "telemetry.humidity.publish",
                         "telemetry.environment.read",
                         "weather.read",
-                        "waste_collection.read",
+                        "calendar.read",
                     ],
                 ),
                 ("no-capabilities", "active", []),

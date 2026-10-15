@@ -355,21 +355,23 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
       security:
       - DeviceBearer: []
-  /api/v1/waste/next:
+  /api/v1/calendar:
     get:
       tags:
-      - waste
-      summary: Next Collection
-      description: Requires waste_collection.read. Collection dates are local calendar
-        dates and reminder dates are calculated from the actual next collection.
-      operationId: next_collection_api_v1_waste_next_get
+      - calendar
+      summary: Calendar Outlook
+      description: Requires calendar.read. Returns today and tomorrow in LOCATION_TIMEZONE,
+        including collection events only, without reminders. Empty days are included.
+        Source failures and stale data are reported independently in sources, not
+        treated as an empty calendar.
+      operationId: calendar_outlook_api_v1_calendar_get
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WasteNext'
+                $ref: '#/components/schemas/CalendarOutlook'
         '401':
           description: Missing or invalid device credentials
           content:
@@ -400,12 +402,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-        '503':
-          description: Waste schedule is unavailable or invalid
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
       security:
       - DeviceBearer: []
   /api/v1/dashboard:
@@ -413,7 +409,7 @@ paths:
       tags:
       - dashboard
       summary: Dashboard
-      description: Requires telemetry.environment.read, weather.read, and waste_collection.read.
+      description: Requires telemetry.environment.read, weather.read, and calendar.read.
         Sections report unavailable integrations independently.
       operationId: dashboard_api_v1_dashboard_get
       responses:
@@ -457,6 +453,117 @@ paths:
       - DeviceBearer: []
 components:
   schemas:
+    CalendarDay:
+      properties:
+        date:
+          type: string
+          format: date
+          title: Date
+        entries:
+          items:
+            $ref: '#/components/schemas/CalendarEntry'
+          type: array
+          title: Entries
+      type: object
+      required:
+      - date
+      title: CalendarDay
+    CalendarEntry:
+      properties:
+        id:
+          type: string
+          title: Id
+        source:
+          type: string
+          title: Source
+        kind:
+          type: string
+          title: Kind
+        date:
+          type: string
+          format: date
+          title: Date
+        title:
+          type: string
+          title: Title
+        all_day:
+          type: boolean
+          title: All Day
+          default: true
+        collection_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Collection Date
+        bins:
+          items:
+            type: string
+          type: array
+          title: Bins
+        address:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Address
+      type: object
+      required:
+      - id
+      - source
+      - kind
+      - date
+      - title
+      title: CalendarEntry
+    CalendarOutlook:
+      properties:
+        timezone:
+          type: string
+          title: Timezone
+        days:
+          items:
+            $ref: '#/components/schemas/CalendarDay'
+          type: array
+          maxItems: 2
+          minItems: 2
+          title: Days
+        sources:
+          additionalProperties:
+            $ref: '#/components/schemas/CalendarSourceStatus'
+          type: object
+          title: Sources
+      type: object
+      required:
+      - timezone
+      - days
+      - sources
+      title: CalendarOutlook
+    CalendarSourceStatus:
+      properties:
+        status:
+          type: string
+          enum:
+          - available
+          - unavailable
+          title: Status
+        stale:
+          type: boolean
+          title: Stale
+          default: false
+        source_timestamp:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Source Timestamp
+        error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
+      type: object
+      required:
+      - status
+      title: CalendarSourceStatus
     DashboardResponse:
       properties:
         environment:
@@ -465,14 +572,14 @@ components:
           $ref: '#/components/schemas/IntegrationResult_WeatherCurrent_'
         forecast:
           $ref: '#/components/schemas/IntegrationResult_WeatherForecast_'
-        waste:
-          $ref: '#/components/schemas/IntegrationResult_WasteNext_'
+        calendar:
+          $ref: '#/components/schemas/CalendarOutlook'
       type: object
       required:
       - environment
       - weather
       - forecast
-      - waste
+      - calendar
       title: DashboardResponse
     DeviceMessage:
       properties:
@@ -706,29 +813,6 @@ components:
       - temperature_c
       - condition
       title: ForecastPeriod
-    IntegrationResult_WasteNext_:
-      properties:
-        status:
-          type: string
-          enum:
-          - available
-          - unavailable
-          title: Status
-        data:
-          anyOf:
-          - $ref: '#/components/schemas/WasteNext'
-          - type: 'null'
-        error:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Error
-      type: object
-      required:
-      - status
-      - data
-      - error
-      title: IntegrationResult[WasteNext]
     IntegrationResult_WeatherCurrent_:
       properties:
         status:
@@ -903,68 +987,6 @@ components:
       required:
       - measurements
       title: TelemetryPayload
-    WasteNext:
-      properties:
-        available:
-          type: boolean
-          title: Available
-        address:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Address
-        collection_date:
-          anyOf:
-          - type: string
-            format: date
-          - type: 'null'
-          title: Collection Date
-        bins:
-          items:
-            type: string
-          type: array
-          title: Bins
-        days_remaining:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Days Remaining
-        reminder_date:
-          anyOf:
-          - type: string
-            format: date
-          - type: 'null'
-          title: Reminder Date
-        reminder_due:
-          type: boolean
-          title: Reminder Due
-          default: false
-        source_timestamp:
-          anyOf:
-          - type: string
-            format: date-time
-          - type: 'null'
-          title: Source Timestamp
-        stale:
-          type: boolean
-          title: Stale
-          default: false
-      type: object
-      required:
-      - available
-      title: WasteNext
-      example:
-        address: Configured Bury address
-        available: true
-        bins:
-        - General waste
-        - Recycling
-        collection_date: '2026-10-16'
-        days_remaining: 1
-        reminder_date: '2026-10-15'
-        reminder_due: true
-        source_timestamp: '2026-10-12T12:00:00Z'
-        stale: false
     WeatherCurrent:
       properties:
         location:

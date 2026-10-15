@@ -14,7 +14,8 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from home_controller.api.v1.router import router
 from home_controller.config import Settings, get_settings
-from home_controller.services.waste_service import CachedWasteService, ManualWasteProvider
+from home_controller.services.calendar_service import CalendarService, WasteCalendarSource
+from home_controller.services.waste_service import CachedWasteService, build_waste_provider
 from home_controller.services.weather_service import (
     CachedWeatherService,
     build_weather_provider,
@@ -107,7 +108,10 @@ def create_app(settings: Settings | None = None, *, database_url: str | None = N
                 build_weather_provider(config, client), config.weather_cache_ttl_seconds
             )
             app.state.waste_service = CachedWasteService(
-                ManualWasteProvider(config.waste_manual_schedule), config
+                build_waste_provider(config, client), config
+            )
+            app.state.calendar_service = CalendarService(
+                [WasteCalendarSource(app.state.waste_service, config)], config.location_timezone
             )
             yield
         await engine.dispose()
