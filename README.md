@@ -236,8 +236,9 @@ Dates remain local calendar dates in `LOCATION_TIMEZONE` (default `Europe/London
 a stable `id`, `source`, `kind`, `date`, `title`, and `all_day`. Waste entries also
 contain `collection_date`, `bins`, and `address`.
 
-Waste is the initial source; other sources can implement `CalendarSource` and be
-registered with `CalendarService` without adding source-specific endpoints.
+Waste is always included. Google Calendar is included when configured below.
+Other sources can implement `CalendarSource` and be registered with
+`CalendarService` without adding source-specific endpoints.
 Weather remains separate and is not included in the calendar.
 
 Each collection appears once, on its collection date. All collections in today's
@@ -264,6 +265,8 @@ For a Friday 16 October collection, Thursday's response includes:
         "date": "2026-10-16",
         "title": "Bin collection",
         "all_day": true,
+        "starts_at": null,
+        "ends_at": null,
         "collection_date": "2026-10-16",
         "bins": ["blue", "brown"],
         "address": "Willow Brae 46 Hunstanton Drive"
@@ -286,6 +289,84 @@ an explicit `error`, keeping healthy sources usable. An available source with
 empty day entries means no scheduled events; an unavailable source means the
 schedule is unknown. Cached events returned after a refresh failure have
 `sources.<name>.stale: true`.
+
+#### Google Calendar
+
+The controller supports either a service account (no refresh token) or user OAuth.
+Both methods read one selected calendar without modifying it.
+
+##### Service account (recommended for unattended use)
+
+1. Enable the Google Calendar API in your Google Cloud project.
+2. Create a service account and download a JSON private key for it. Store the key
+   outside this repository with file permissions restricted to the controller user.
+3. In Google Calendar, open the desired calendar's **Settings and sharing** and
+   share it with the service account's email address (`client_email` in the JSON),
+   granting **See all event details**. Workspace policies may restrict sharing.
+4. Copy the calendar's **Calendar ID** from **Integrate calendar**. Use the actual
+   ID, not `primary`, which refers to the authenticated identity's calendar.
+5. Configure your local `.env` and restart:
+
+   ```dotenv
+   GOOGLE_CALENDAR_ID=your-calendar-id@group.calendar.google.com
+   GOOGLE_CALENDAR_AUTH_METHOD=service_account
+   GOOGLE_CALENDAR_SERVICE_ACCOUNT_FILE=/absolute/path/to/service-account.json
+   ```
+
+No OAuth client ID, client secret, or refresh token is required in this mode;
+existing OAuth values are ignored. The controller signs a short-lived assertion
+with the key to obtain access tokens automatically. It does not impersonate your
+Google account or require domain-wide delegation. Missing, unreadable, or invalid
+keys are reported as an unavailable Google source, leaving waste data usable.
+Never commit or share the JSON private key.
+
+##### User OAuth
+
+The controller reads one selected calendar, without modifying it:
+
+1. Enable the Google Calendar API in your Google Cloud project and create an
+   OAuth client. Configure its consent screen and allow your Google account.
+2. Authorize that account with the read-only scope
+   `https://www.googleapis.com/auth/calendar.events.readonly` and offline access
+   (`access_type=offline`, `prompt=consent`). Exchange the authorization code using
+   your OAuth client's registered redirect URI to obtain a refresh token.
+   This is a one-time administrator setup; the controller does not host an OAuth
+   callback or sign-in page. Google's OAuth Playground can be used with your own
+   OAuth credentials and its redirect URI registered on the client.
+3. In Google Calendar, open the desired calendar's **Settings and sharing >
+   Integrate calendar** and copy its **Calendar ID**. The authorized account must
+   have permission to read that calendar's events.
+4. Set these values in your local `.env` and restart the controller:
+
+   ```dotenv
+   GOOGLE_CALENDAR_ID=your-calendar-id@group.calendar.google.com
+   GOOGLE_CALENDAR_AUTH_METHOD=oauth
+   GOOGLE_CALENDAR_CLIENT_ID=your-oauth-client-id
+   GOOGLE_CALENDAR_CLIENT_SECRET=your-oauth-client-secret
+   GOOGLE_CALENDAR_REFRESH_TOKEN=your-refresh-token
+   GOOGLE_CALENDAR_CACHE_TTL_SECONDS=300
+   GOOGLE_CALENDAR_TIMEOUT_SECONDS=10
+   ```
+
+Keep credentials private; do not commit `.env`. Leave `GOOGLE_CALENDAR_ID` empty
+to disable Google integration. OAuth mode requires all three OAuth credentials.
+External OAuth apps in Google's Testing mode generally have refresh tokens that
+expire after seven days for this scope; configure the consent screen appropriately
+for long-running access. If authorization is revoked or expires, authorize again
+and replace the refresh token.
+
+Both `/api/v1/calendar` and the dashboard's `calendar` section merge Google events
+(`source: "google"`, `kind: "event"`) with waste collections. Recurring events are
+expanded by Google. Timed events have offset-aware `starts_at` and `ends_at`;
+all-day events leave these null. Each event appears on every local day it overlaps
+within today/tomorrow, with an exclusive end boundary (so an event ending at
+midnight does not appear the following day). Event locations use `address`.
+Cancelled events are excluded. Events without a title use `(Untitled event)`.
+
+Google results are cached in memory for the configured TTL. Both authentication
+methods obtain short-lived access tokens automatically. On refresh failure, only cached results
+for the exact same date window may be returned as stale; otherwise `sources.google`
+reports unavailable with a sanitized error. Waste remains usable independently.
 
 **Breaking change:** `/api/v1/waste/next` has been removed, and the dashboard's
 `waste` section is replaced by `calendar` with the same shape as this endpoint.

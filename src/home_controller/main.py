@@ -14,7 +14,12 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from home_controller.api.v1.router import router
 from home_controller.config import Settings, get_settings
-from home_controller.services.calendar_service import CalendarService, WasteCalendarSource
+from home_controller.services.calendar_service import (
+    CalendarService,
+    CalendarSource,
+    WasteCalendarSource,
+)
+from home_controller.services.google_calendar_provider import GoogleCalendarProvider
 from home_controller.services.waste_service import CachedWasteService, build_waste_provider
 from home_controller.services.weather_service import (
     CachedWeatherService,
@@ -110,9 +115,12 @@ def create_app(settings: Settings | None = None, *, database_url: str | None = N
             app.state.waste_service = CachedWasteService(
                 build_waste_provider(config, client), config
             )
-            app.state.calendar_service = CalendarService(
-                [WasteCalendarSource(app.state.waste_service, config)], config.location_timezone
-            )
+            calendar_sources: list[CalendarSource] = [
+                WasteCalendarSource(app.state.waste_service, config)
+            ]
+            if config.google_calendar_id.strip():
+                calendar_sources.append(GoogleCalendarProvider(config, client))
+            app.state.calendar_service = CalendarService(calendar_sources, config.location_timezone)
             yield
         await engine.dispose()
 

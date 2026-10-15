@@ -361,9 +361,9 @@ paths:
       - calendar
       summary: Calendar Outlook
       description: Requires calendar.read. Returns today and tomorrow in LOCATION_TIMEZONE,
-        including collection events only, without reminders. Empty days are included.
-        Source failures and stale data are reported independently in sources, not
-        treated as an empty calendar.
+        including waste collections and events from the configured Google Calendar.
+        Empty days are included. Source failures and stale data are reported independently
+        in sources, not treated as an empty calendar.
       operationId: calendar_outlook_api_v1_calendar_get
       responses:
         '200':
@@ -490,6 +490,18 @@ components:
           type: boolean
           title: All Day
           default: true
+        starts_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Starts At
+        ends_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Ends At
         collection_date:
           anyOf:
           - type: string

@@ -14,7 +14,8 @@ router = APIRouter(prefix="/api/v1/calendar", tags=["calendar"])
     responses=ERROR_RESPONSES,
     description=(
         "Requires calendar.read. Returns today and tomorrow in LOCATION_TIMEZONE, including "
-        "collection events only, without reminders. Empty days are included. Source failures and "
+        "waste collections and events from the configured Google Calendar. Empty days are "
+        "included. Source failures and "
         "stale data are reported independently in sources, not treated as an empty calendar."
     ),
 )

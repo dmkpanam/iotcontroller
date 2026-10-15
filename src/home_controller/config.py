@@ -2,7 +2,7 @@ from functools import lru_cache
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,7 +31,39 @@ class Settings(BaseSettings):
     waste_manual_schedule: str = "[]"
     waste_cache_ttl_seconds: int = Field(default=3600, ge=0)
     waste_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
+    google_calendar_id: str = ""
+    google_calendar_auth_method: Literal["oauth", "service_account"] = "oauth"
+    google_calendar_service_account_file: str = ""
+    google_calendar_client_id: str = ""
+    google_calendar_client_secret: SecretStr = SecretStr("")
+    google_calendar_refresh_token: SecretStr = SecretStr("")
+    google_calendar_cache_ttl_seconds: int = Field(default=300, ge=0)
+    google_calendar_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
     request_body_limit_bytes: int = Field(default=16384, ge=1024, le=1048576)
+
+    @model_validator(mode="after")
+    def require_google_calendar_credentials(self) -> "Settings":
+        if not self.google_calendar_id.strip():
+            return self
+        if self.google_calendar_auth_method == "service_account":
+            if not self.google_calendar_service_account_file.strip():
+                raise ValueError(
+                    "GOOGLE_CALENDAR_SERVICE_ACCOUNT_FILE is required for "
+                    "GOOGLE_CALENDAR_AUTH_METHOD=service_account"
+                )
+            return self
+        if not all(
+            (
+                self.google_calendar_client_id.strip(),
+                self.google_calendar_client_secret.get_secret_value().strip(),
+                self.google_calendar_refresh_token.get_secret_value().strip(),
+            )
+        ):
+            raise ValueError(
+                "GOOGLE_CALENDAR_CLIENT_ID, GOOGLE_CALENDAR_CLIENT_SECRET, and "
+                "GOOGLE_CALENDAR_REFRESH_TOKEN are required when GOOGLE_CALENDAR_ID is set"
+            )
+        return self
 
     @model_validator(mode="after")
     def require_bury_address(self) -> "Settings":

@@ -12,6 +12,7 @@ dependencies = [
     "alembic>=1.13",
     "aiosqlite>=0.20",
     "fastapi>=0.115",
+    "google-auth[cryptography]>=2.35",
     "httpx>=0.27",
     "pydantic>=2.9",
     "pydantic-settings>=2.5",

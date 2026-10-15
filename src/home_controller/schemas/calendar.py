@@ -11,6 +11,8 @@ class CalendarEntry(BaseModel):
     date: date
     title: str
     all_day: bool = True
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
     collection_date: date | None = None
     bins: list[str] = Field(default_factory=list)
     address: str | None = None
